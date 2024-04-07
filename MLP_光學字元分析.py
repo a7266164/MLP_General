@@ -208,6 +208,7 @@ def hyperparameter_best(t_dataset,
         
         輸出:
         - np.mean(k_fold_cross_entropy_loss) : 該次蒐索的K折平均損失。
+        - STATUS_OK                          : 該次蒐索成功。
         """
         # 儲存K折交叉熵損失
         k_fold_cross_entropy_loss = []  
