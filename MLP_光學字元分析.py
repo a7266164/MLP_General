@@ -1,5 +1,5 @@
 '''
-本程式以MNIST的部份手寫數字0-9的照片訓練MLP模型，並在訓練完後以另一部份照片測試分類性能。
+本程式訓練MLP模型並用於辨識手寫數字0-9的照片
 '''
 
 import os
@@ -12,7 +12,7 @@ import seaborn as sns
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
-from hyperopt import fmin, tpe, hp
+from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 from sklearn.metrics import confusion_matrix, cohen_kappa_score, accuracy_score
@@ -196,6 +196,8 @@ def hyperparameter_best(t_dataset,
     # 初始化最佳參數的字典
     best_params = {}  
 
+    trials = Trials()
+
     # 目標函數
     def objective(params):
         """
@@ -212,6 +214,8 @@ def hyperparameter_best(t_dataset,
 
         # K折
         kf = KFold(n_splits=k_folds)
+        
+        print(f"正在評估參數組合 {len(trials) + 1}/{max_evals}")
         
         # 主迴圈
         for train_index, test_index in kf.split(t_dataset):
@@ -231,6 +235,8 @@ def hyperparameter_best(t_dataset,
 
 
             #=======================================程式運行區=======================================#
+            
+            print(f"正在評估第 {len(k_fold_cross_entropy_loss) + 1} 折")
             
             # 分割子集
             train_dataset = torch.utils.data.Subset(t_dataset, train_index)
@@ -261,9 +267,9 @@ def hyperparameter_best(t_dataset,
                 optimizer = optim.RMSprop(model.parameters(), lr=learning_rate)
             
             # 主迴圈
-            for epoch in range(100):
-
-                for j, data in enumerate(trainloader, 0):
+            for _ in range(10):
+                print(f"Epoch {_+1}")
+                for _, data in enumerate(trainloader, 0):
                     inputs, labels = data
                     inputs, labels = inputs.to(device), labels.to(device)
                     optimizer.zero_grad()
@@ -276,17 +282,9 @@ def hyperparameter_best(t_dataset,
                 # 測試模型
                 test_loss = 0.0
                 with torch.no_grad():
-                    for data in testloader:
-                        inputs, labels = data
-                        inputs, labels = inputs.to(device), labels.to(device)
-                        outputs = model(inputs)
-                        loss = criterion(outputs, labels)
-                        test_loss += loss.item()
-                
-                avg_test_loss = test_loss / len(testloader)
-                
-                if avg_test_loss < best_cross_entropy_loss:
-                    best_cross_entropy_loss = avg_test_loss
+                    test_loss = sum(criterion(model(inputs.to(device)), labels.to(device)).item() for inputs, labels in testloader) / len(testloader)
+                if test_loss < best_cross_entropy_loss:
+                    best_cross_entropy_loss = test_loss
                     early_stopping_counter = 0
                 else:
                     early_stopping_counter += 1
@@ -295,8 +293,8 @@ def hyperparameter_best(t_dataset,
                     break
             
             k_fold_cross_entropy_loss.append(best_cross_entropy_loss)
-        
-        return np.mean(k_fold_cross_entropy_loss)
+
+        return {'loss': np.mean(k_fold_cross_entropy_loss), 'status': STATUS_OK}
     
     # 貝葉斯優化
     best = fmin(fn=objective, space=param_grid, algo=tpe.suggest, max_evals = max_evals)
@@ -577,7 +575,7 @@ def main():
     #=========================================設定區=========================================#
     
     # 儲存路徑
-    base_path    = "./訓練結果1"
+    base_path    = "./機器學習/MLP_公用版本/訓練結果1"
 
     # 輸入特徵數
     input_dim    = 784
@@ -589,11 +587,11 @@ def main():
     train_size   = 0.8
 
     # 貝葉斯蒐索次數
-    max_evals    = 5
+    max_evals    = 1
 
     # 超參數範圍
-    hidden_layers_choices     = (1, 5, 1)           # 在 1 到 5 之間隨機選取，步長為 1
-    neurons_per_layer_choices = (100, 200, 10)      # 在 100 到 200 之間隨機選取，步長為 10
+    hidden_layers_choices     = (1, 2, 1)           # 在 1 到 5 之間隨機選取，步長為 1
+    neurons_per_layer_choices = (10, 30, 10)      # 在 100 到 200 之間隨機選取，步長為 10
     dropout_rate_range        = (0.15, 0.45)             
     learning_rate_range       = (0.0005, 0.002)
     optimizer_choices         = ['adam', 'sgd', 'rmsprop']
